@@ -13,22 +13,24 @@ app.use(cors());
 const server = http.createServer(app);
 const io = require("socket.io")(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "https://test.vcaretechnologies.net",
+    //  "http://localhost:3000",
     methods: ["GET", "POST"],
   },
 });
 
 // Create a MySQL connection pool
 const pool = mysql.createPool({
-  host: "localhost",
+  host: "0.0.0.0",
   user: "root",
-  password: "123456",
-  database: "audio",
+  password: "Vcare123???",
+  database: "voice_note",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
 });
 app.use(express.static("public"));
+
 const imageStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "public/images"); // Specify the destination folder for images
@@ -40,25 +42,38 @@ const imageStorage = multer.diskStorage({
 
 const upload = multer({ storage: imageStorage });
 
-
 let currentGroup = "g1";
+
 io.on("connection", (socket) => {
   console.log("A user connected");
 
   socket.on("send-audio", async ({ audioBlob }) => {
+    // const audioPath = `public/audio/${Date.now()}.webm`;
     const group = currentGroup;
     console.log("Received audio from group:", group);
     const audioFileName = `${Date.now()}.webm`;
 
     const audioPath = path.join(__dirname, "public", "audio", audioFileName);
 
-    fs.writeFile(audioPath, audioBlob, async (err) => {
-      if (err) {
-        console.error("Error writing audio file:", err);
-        return;
-      }
+    // // fs.writeFileSync(audioPath, audioBlob);
+    // fs.writeFile(audioPath, audioBlob, async (err) => {
+    //   if (err) {
+    //     console.error("Error writing audio file:", err);
+    //     return;
+    //   }
+
+    const audioStream = fs.createWriteStream(audioPath);
+    audioBlob.pipe(audioStream);
+
+    audioStream.on("error", (err) => {
+      console.error("Error writing audio file:", err);
+    });
+
+    audioStream.on("finish", async () => {
       try {
-        const audioURL = `/audio/${audioFileName}`;
+        const audioURL =
+          // `http://localhost:5000
+          `/audio/${audioFileName}`;
 
         // Save audio message in the database
         const insertQuery =
@@ -67,48 +82,27 @@ io.on("connection", (socket) => {
 
         // Broadcast the audio to all connected users
         socket.broadcast.emit("received-audio", audioURL);
-
-        // Now, let's fetch audio messages for the same group
-        const group = currentGroup; // You can customize this if needed
-        const selectQuery = "SELECT * FROM audio_message WHERE group_name = ?";
-        const [rows, fields] = await pool.execute(selectQuery, [group]);
-        console.log("Response========>:", rows);
       } catch (error) {
         console.error("Error saving audio message in the database:", error);
       }
     });
   });
 
-  // New endpoint to send text messages
-  socket.on("send-text", async ({ sender, messageText }) => {
-    const group = currentGroup;
-    console.log("Received text message from group:", group);
-
-    try {
-      // Save text message in the database
-      const insertQuery =
-        "INSERT INTO text_message (sender, message_text, group_name) VALUES (?, ?, ?)";
-      await pool.query(insertQuery, [sender, messageText, currentGroup]);
-    } catch (error) {
-      console.error("Error saving text message in the database:", error);
-    }
-  });
-
   app.post("/api/upload-image", upload.single("image"), async (req, res) => {
     try {
       // Get the uploaded image file
       const imageFile = req.file;
-  
+
       if (!imageFile) {
         return res.status(400).json({ error: "No image file uploaded" });
       }
-  
+
       // Save image file information in the database
       const imageUrl = `/images/${imageFile.filename}`;
       const insertQuery =
         "INSERT INTO image_message (sender, image_url, group_name) VALUES (?, ?, ?)";
       await pool.query(insertQuery, [socket.id, imageUrl, currentGroup]);
-  
+
       res.status(201).json({ message: "Image uploaded successfully" });
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -128,38 +122,38 @@ io.on("connection", (socket) => {
   });
 });
 
-app.post("/api/store-audio", async (req, res) => {
-  const { sender, audioPath } = req.body;
+// app.post("/api/store-audio", async (req, res) => {
+//   const { sender, audioPath } = req.body;
 
-  try {
-    // Save audio message in the database
-    const insertQuery =
-      "INSERT INTO audio_message (sender, audio_url, group_name) VALUES (?, ?, ?)";
-    await pool.execute(insertQuery, [sender, audioPath, currentGroup]);
+//   try {
+//     // Save audio message in the database
+//     const insertQuery =
+//       "INSERT INTO audio_message (sender, audio_url, group_name) VALUES (?, ?, ?)";
+//     await pool.execute(insertQuery, [sender, audioPath, currentGroup]);
 
-    res.status(201).json({ message: "Audio message stored successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error storing audio message" });
-  }
-});
+//     res.status(201).json({ message: "Audio message stored successfully" });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "Error storing audio message" });
+//   }
+// });
 
 // API endpoint to fetch audio messages
 // app.get("/api/audio-messages", async (req, res) => {
 //   const group = req.query.group || currentGroup; // Use the selected group or the current group
-
 //   try {
 //     const selectQuery = "SELECT * FROM audio_message WHERE group_name = ?";
 //     const [rows, fields] = await pool.execute(selectQuery, [group]);
-//     console.log("Response:", rows);
 //     res.status(200).json(rows);
+//     // console.log("res--->", res);
+//     console.log("group===>", group);
 //   } catch (error) {
 //     console.error(error);
 //     res.status(500).json({ error: "Error fetching audio messages" });
 //   }
 // });
 
-app.get("/api/messages", async (req, res) => {
+app.get("/api/audio-messages", async (req, res) => {
   const group = req.query.group || currentGroup; // Use the selected group or the current group
 
   try {
@@ -173,11 +167,19 @@ app.get("/api/messages", async (req, res) => {
     const textSelectQuery = "SELECT * FROM text_message WHERE group_name = ?";
     const [textRows, textFields] = await pool.execute(textSelectQuery, [group]);
 
-     // Fetch text messages
-     const imageSelectQuery = "SELECT * FROM image_message WHERE group_name = ?";
-     const [imageRows, imageFields] = await pool.execute(imageSelectQuery, [group]);
+    // Fetch text messages
+    const imageSelectQuery = "SELECT * FROM image_message WHERE group_name = ?";
+    const [imageRows, imageFields] = await pool.execute(imageSelectQuery, [
+      group,
+    ]);
 
-    res.status(200).json({ audioMessages: audioRows, textMessages: textRows, imageMessages:imageRows  });
+    res
+      .status(200)
+      .json({
+        audioMessages: audioRows,
+        textMessages: textRows,
+        imageMessages: imageRows,
+      });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error fetching messages" });
