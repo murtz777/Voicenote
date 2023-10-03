@@ -1,23 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ReactMic } from "react-mic";
 import AudioPlayer from "react-h5-audio-player";
 import "react-h5-audio-player/lib/styles.css";
 import io from "socket.io-client";
-import AudioReceiver from "./AudioReceiver";
 import axios from "axios";
+import AudioReceiver from "./AudioReceiver";
 
-
-const socket = io("http://localhost:5000"); // Replace with your server URL
+const socket = io("https://api.vcaretechnologies.net"); // Replace with your server URL
 
 const AudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState("g1");
   const [audioMessages, setAudioMessages] = useState([]);
-  const [textMessage, setTextMessage] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
- 
-  
+  const [textMessage, setTextMessage] = useState("");
 
   const startRecording = () => {
     setIsRecording(true);
@@ -31,40 +28,37 @@ const AudioRecorder = () => {
     // Do something with recordedBlob if needed
   };
 
-  
-  const handleTextChange = (e) => {
-    setTextMessage(e.target.value);
-  };
+  // const onStop = (recordedBlob) => {
+  //   setAudioBlob(recordedBlob.blob);
+  // };
 
-  const sendTextMessage = () => {
-    socket.emit("send-text", { sender: "YourName", messageText: textMessage });
-    setTextMessage(""); // Clear the input field after sending
-  };
+  // const sendAudio = () => {
+  //   if (audioBlob) {
+  //     socket.emit("send-audio", { audioBlob, group: selectedGroup });
+  //   }
+  // };
+  // const sendAudio = () => {
+  //   if (audioBlob) {
+  //     console.log("Sending audio with group:", selectedGroup);
+  //     socket.emit("send-audio", { audioBlob, group: selectedGroup });
+  //   } else {
+  //     console.log("No audio to send");
+  //   }
+  // };
+
+    
+
 
  
-  const handleGroupChange = (group) => {
-    setSelectedGroup(group);
-    socket.emit("join-group", group);
-    fetchAudioMessages(group);
-    console.log("Selected Group:", group);
-    
-  };
 
-  const fetchAudioMessages = async (group) => {
-    try {
-      const response = await axios.get(
-        `http://localhost:5000/api/audio-messages?group=${group}`
-      );
-      setAudioMessages(response.data);
-      console.log("audiomessage===>",audioMessages)
-    } catch (error) {
-      console.error("Error fetching audio messages:", error);
-    }
-  };
+
+
+
   const onStop = (recordedBlob) => {
     const audioBlob = recordedBlob.blob;
     sendAudio(audioBlob);
   };
+  
   const sendAudio = async (audioBlob) => {
     try {
       if (audioBlob) {
@@ -78,37 +72,68 @@ const AudioRecorder = () => {
     }
   };
 
-
-  // Handle image selection and upload
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    setSelectedImage(file);
+  const handleTextChange = (e) => {
+    setTextMessage(e.target.value);
   };
 
-  const sendImage = async () => {
-    try {
-      if (selectedImage) {
-        const formData = new FormData();
-        formData.append("image", selectedImage);
+  const sendTextMessage = () => {
+    socket.emit("send-text", { sender: "YourName", messageText: textMessage });
+    setTextMessage(""); // Clear the input field after sending
+  };
 
-        await axios.post("http://localhost:5000/api/upload-image", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
+    // Handle image selection and upload
+    const handleImageUpload = (e) => {
+      const file = e.target.files[0];
+      setSelectedImage(file);
+    };
 
-        console.log("Image sent successfully");
-      } else {
-        console.log("No image to send");
+
+    const sendImage = async () => {
+      try {
+        if (selectedImage) {
+          const formData = new FormData();
+          formData.append("image", selectedImage);
+  
+          await axios.post("https://api.vcaretechnologies.net/api/upload-image", formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          });
+  
+          console.log("Image sent successfully");
+        } else {
+          console.log("No image to send");
+        }
+      } catch (error) {
+        console.error("Error sending image:", error);
       }
-    } catch (error) {
-      console.error("Error sending image:", error);
-    }
-  };
+    };
+  
+
+
 
   useEffect(() => {
     handleGroupChange(selectedGroup);
   }, [selectedGroup]);
+
+  const handleGroupChange = (group) => {
+    setSelectedGroup(group);
+    socket.emit("join-group", group);
+    fetchAudioMessages(group);
+    console.log("Selected Group:", group);
+  };
+
+  const fetchAudioMessages = async (group) => {
+    try {
+      const response = await axios.get(
+        `https://api.vcaretechnologies.net/api/audio-messages?group=${group}`
+      );
+      setAudioMessages(response.data);
+      console.log("audiomessage===>", audioMessages);
+    } catch (error) {
+      console.error("Error fetching audio messages:", error);
+    }
+  };
 
   return (
     <>
@@ -136,6 +161,7 @@ const AudioRecorder = () => {
       >
         G4
       </button>
+
       <div>
         <textarea
           rows="4"
@@ -149,8 +175,8 @@ const AudioRecorder = () => {
 
       <input type="file" accept="image/*"  className="form-control"  onChange={handleImageUpload} />
         <button onClick={sendImage}>Send Image</button>
+
       <div>
-      
         <ReactMic
           record={isRecording}
           onData={onData}
@@ -158,8 +184,15 @@ const AudioRecorder = () => {
           className="sound-wave"
           mimeType="audio/webm"
         />
-        
-
+        {/* <button onClick={startRecording} disabled={isRecording}>
+          Start Recording
+        </button>
+        <button onClick={stopRecording} disabled={!isRecording}>
+          Stop Recording
+        </button>
+        <button onClick={sendAudio} disabled={!audioBlob}>
+          Send Audio
+        </button> */}
         <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
@@ -168,7 +201,6 @@ const AudioRecorder = () => {
         >
           Hold to Recordecord
         </button>
-
         {audioBlob && (
           <div>
             <AudioPlayer
@@ -178,7 +210,10 @@ const AudioRecorder = () => {
             />
           </div>
         )}
-        <AudioReceiver selectedGroup={selectedGroup} />
+        <AudioReceiver
+          selectedGroup={selectedGroup}
+          //  data={dataToSend}
+        />
       </div>
     </>
   );
